@@ -102,8 +102,10 @@ def draw_court_base(ax, engine):
 st.set_page_config(layout="wide", page_title="Handball analyst")
 engine = HandballCourtEngine()
 
+# セッション状態の初期化
 if "logs" not in st.session_state: st.session_state.logs = []
 if "log_id_counter" not in st.session_state: st.session_state.log_id_counter = 0
+if "last_sent_idx" not in st.session_state: st.session_state.last_sent_idx = 0 # 追加：送信済み位置管理
 if "ally_players" not in st.session_state: st.session_state.ally_players = []
 if "opp_players" not in st.session_state: st.session_state.opp_players = []
 if "suspensions" not in st.session_state: st.session_state.suspensions = []
@@ -117,10 +119,9 @@ if "history_df" not in st.session_state: st.session_state.history_df = None
 elapsed = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
 current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
 
-# CSSの適用：明るめのスレートグレー（#94a3b8）ですべてを統一
+# CSSの適用：明るめのグレー（#94a3b8）ですべてのボタンを統一
 st.markdown("""
     <style>
-    /* すべてのボタン、ダウンロードボタン、フォームボタンを薄いグレーに統一 */
     button, 
     .stDownloadButton > button, 
     .stFormSubmitButton > button {
@@ -130,15 +131,11 @@ st.markdown("""
         font-weight: bold !important;
         transition: 0.2s;
     }
-    
-    /* ホバー時は少しだけ濃く */
     button:hover, 
     .stDownloadButton > button:hover, 
     .stFormSubmitButton > button:hover {
         background-color: #64748b !important;
     }
-
-    /* 装飾系パーツ */
     .score-board-container { display: flex; align-items: center; justify-content: center; background: #f8f4e3; border-radius: 15px; border: 1px solid #e2e8f0; margin-bottom: 5px; padding: 15px 0; min-height: 120px; }
     .team-side-a { flex: 1; display: flex; justify-content: space-between; align-items: center; padding-left: 40px; padding-right: 60px; }
     .team-side-o { flex: 1; display: flex; justify-content: space-between; align-items: center; padding-left: 60px; padding-right: 40px; }
@@ -195,22 +192,47 @@ with st.sidebar:
             st.rerun()
 
     st.divider(); st.header("💾 データ管理")
+    # スプレッドシート送信ロジック（修正：重複防止機能付き）
     if st.button("🌐 スプレッドシートに蓄積送信", use_container_width=True):
-        if not GSHEETS_READY: st.error("設定が必要です。")
-        elif not st.session_state.logs: st.warning("データがありません。")
+        if not GSHEETS_READY:
+            st.error("設定が必要です。")
+        elif not st.session_state.logs:
+            st.warning("データがありません。")
         else:
             try:
                 conn = st.connection("gsheets", type=GSheetsConnection)
-                df_new = pd.DataFrame(st.session_state.logs).drop(columns=['id'], errors='ignore')
-                try:
-                    df_old = conn.read(ttl=0)
-                    df_final = pd.concat([df_old, df_new], ignore_index=True)
-                except: df_final = df_new
-                conn.update(data=df_final); st.success("送信完了！"); st.balloons()
-            except Exception as e: st.error(f"送信失敗: {e}")
+                
+                # 未送信のログだけを抽出
+                current_logs = st.session_state.logs
+                new_logs = current_logs[st.session_state.last_sent_idx:]
+                
+                if not new_logs:
+                    st.info("新しく送信するデータはありません。")
+                else:
+                    df_new = pd.DataFrame(new_logs).drop(columns=['id'], errors='ignore')
+                    try:
+                        df_old = conn.read(ttl=0)
+                        df_final = pd.concat([df_old, df_new], ignore_index=True)
+                    except:
+                        df_final = df_new
+                    
+                    conn.update(data=df_final)
+                    
+                    # 送信済みの位置を更新
+                    st.session_state.last_sent_idx = len(current_logs)
+                    
+                    st.success(f"{len(new_logs)}件の新規データを蓄積しました！")
+                    st.balloons()
+            except Exception as e:
+                st.error(f"送信失敗: {e}")
 
     if st.button("♻️ 画面をリセット(次の試合へ)", use_container_width=True):
-        st.session_state.logs = []; st.session_state.log_id_counter = 0; st.session_state.stopped_time = 0; st.session_state.running = False; st.rerun()
+        st.session_state.logs = []
+        st.session_state.log_id_counter = 0
+        st.session_state.last_sent_idx = 0 # 追加：リセット
+        st.session_state.stopped_time = 0
+        st.session_state.running = False
+        st.rerun()
 
     has_logs = len(st.session_state.logs) > 0
     csv_data = pd.DataFrame(st.session_state.logs).drop(columns=['id'], errors='ignore').to_csv(index=False).encode('utf-8-sig') if has_logs else b""
@@ -220,7 +242,7 @@ with st.sidebar:
     display_mode = st.radio("モード切替", ["🔴 リアルタイム試合記録", "📚 過去試合の履歴参照"], index=0)
 
 # ================================
-# 5. 分析・表示用共通関数（G, O, TF対応）
+# 5. 分析・表示用共通関数
 # ================================
 def get_stats_logic(logs_to_calc, team_name, all_logs, target_no=None, is_gk_target=False):
     l_off = [l for l in logs_to_calc if l["チーム"] == team_name]
@@ -282,7 +304,6 @@ if display_mode == "🔴 リアルタイム試合記録":
     
     with c_sw1:
         st.markdown(f"""<div style="background-color: #262730; padding: 20px; border-radius: 12px; text-align: center; border: 3px solid #464b5d; margin-bottom: 10px;"><p style="color: #00ff00; font-family: 'Courier New', monospace; font-size: 3.8rem; font-weight: bold; margin: 0; line-height: 1;">{current_time_str}</p></div>""", unsafe_allow_html=True)
-        # ストップウォッチも他のボタンと同じ薄いグレーになる
         if st.button("Start / Stop", use_container_width=True, key="stopwatch"):
             if not st.session_state.running: st.session_state.start_time = time.time() - st.session_state.stopped_time; st.session_state.running = True
             else: st.session_state.stopped_time = time.time() - st.session_state.start_time; st.session_state.running = False
@@ -317,7 +338,6 @@ if display_mode == "🔴 リアルタイム試合記録":
             edited_o = st.data_editor(pd.DataFrame(sort_p(st.session_state.opp_players)), column_order=("No.", "名前", "Pos", "🟨 警告", "✌退場", "🟥 失格"), hide_index=True, use_container_width=True, key="opp_edit", num_rows="dynamic")
             st.session_state.opp_players = edited_o.to_dict('records')
 
-    # 記録セクション
     st.divider(); st.subheader("記録")
     c_gk1, c_gk2 = st.columns(2)
     with c_gk1:
@@ -351,7 +371,6 @@ if display_mode == "🔴 リアルタイム試合記録":
         p_nums_r = [p["No."] for p in sort_p(st.session_state.ally_players if team_rec == "味方" else st.session_state.opp_players)]
         p_num_r = st.selectbox("No.", p_nums_r if p_nums_r else ["未登録"], key="num_r")
         
-        # ラジオボタン差し戻し
         res_r = st.radio("結果", ["G", "O", "Save", "TF", "RTF"], horizontal=True)
         sit_options = ["7m"] if st.session_state.selected_zone == '9' else ["Set", "FB"]
         sit_r = st.radio("状況", sit_options, horizontal=True)
@@ -367,7 +386,6 @@ if display_mode == "🔴 リアルタイム試合記録":
                 })
                 st.session_state.log_id_counter += 1; st.toast("記録完了！", icon="✅"); time.sleep(0.4); st.rerun()
 
-    # 分析・表示
     st.divider(); st.subheader("分析レポート")
     render_analysis_report(st.session_state.logs, ally_name_in, opp_name_in)
 
@@ -407,7 +425,6 @@ if display_mode == "🔴 リアルタイム試合記録":
     with cl2: dl(opp_name_in, "#991b1b")
 
 else:
-    # 履歴
     st.info("📚 過去試合のデータベースを参照しています。現在の試合記録は保持されています。")
     if GSHEETS_READY:
         if st.button("🔄 全データを読み込む", use_container_width=True):
@@ -427,6 +444,6 @@ else:
                 with hc1: fh1, ah1 = plt.subplots(figsize=(5, 4)); render_heatmap_ui(ah1, "味方", h_logs); st.pyplot(fh1)
                 with hc2: fh2, ah2 = plt.subplots(figsize=(5, 4)); render_heatmap_ui(ah2, "相手", h_logs); st.pyplot(fh2)
 
-# タイマー
+# タイマーリラン
 if st.session_state.running or len(st.session_state.suspensions) > 0:
     time.sleep(0.1); st.rerun()
