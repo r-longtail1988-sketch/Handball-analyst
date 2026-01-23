@@ -11,7 +11,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image
 import pandas as pd
 
-# 【追加】スプレッドシート連携ライブラリ
+# スプレッドシート連携ライブラリの読み込み
 GSHEETS_READY = False
 try:
     from streamlit_gsheets import GSheetsConnection
@@ -98,7 +98,7 @@ if "half" not in st.session_state: st.session_state.half = "前半"
 elapsed = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
 current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
 
-# --- CSS 注入 (デザインを完全維持) ---
+# --- CSS 注入 ---
 st.markdown("""
     <style>
     .ally-theme label p { color: #1e3a8a !important; font-weight: bold !important; }
@@ -152,10 +152,7 @@ with st.sidebar:
             if pen_type in ["✌退場", "🟥 失格"]: st.session_state.suspensions.append({"team": pen_team, "no": pen_target_num, "start_time": elapsed})
             st.rerun()
 
-    # --- 💾 データ出力 (常に表示) ---
     st.divider(); st.header("💾 データ出力")
-    
-    # 1. スプレッドシート送信 (常時表示)
     if st.button("🌐 スプレッドシートに送信", use_container_width=True, type="primary"):
         if not GSHEETS_READY:
             st.error("設定が必要です。")
@@ -170,27 +167,14 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"送信失敗: {e}")
 
-    # 2. CSV保存 (常時表示：データなし時は無効化)
     has_logs = len(st.session_state.logs) > 0
-    if has_logs:
-        df_export = pd.DataFrame(st.session_state.logs).drop(columns=['id'], errors='ignore')
-        csv_data = df_export.to_csv(index=False).encode('utf-8-sig')
-    else:
-        csv_data = b""
-
-    st.download_button(
-        label="📥 試合データをCSV保存",
-        data=csv_data,
-        file_name=f"match_{ally_name_in}_vs_{opp_name_in}.csv",
-        mime="text/csv",
-        use_container_width=True,
-        disabled=not has_logs # データがないときはグレーアウト
-    )
+    csv_data = pd.DataFrame(st.session_state.logs).drop(columns=['id'], errors='ignore').to_csv(index=False).encode('utf-8-sig') if has_logs else b""
+    st.download_button(label="📥 試合データをCSV保存", data=csv_data, file_name=f"match_{ally_name_in}_vs_{opp_name_in}.csv", mime="text/csv", use_container_width=True, disabled=not has_logs)
 
 st.title("🤾 Handball analyst")
 
 # ================================
-# 3. タイマー・退場タイマー
+# 3. タイマー・ピリオド・退場タイマー
 # ================================
 c_sw1, c_sw2 = st.columns([1.2, 3.8])
 btn_color = "#28a745" if st.session_state.running else "#dc3545"
@@ -239,11 +223,12 @@ with col_plist2:
 st.divider(); st.subheader("記録")
 c_gk1, c_gk2 = st.columns(2)
 with c_gk1:
-    st.markdown(f'<p style="color: #1e3a8a; font-weight: bold; margin-bottom: -15px;">出場中の味方GK ({ally_name_in})</p>', unsafe_allow_html=True)
+    # 修正点：margin-bottomを正の値に
+    st.markdown(f'<p style="color: #1e3a8a; font-weight: bold; margin-bottom: 5px;">出場中の味方GK ({ally_name_in})</p>', unsafe_allow_html=True)
     ally_gk_nums = [p["No."] for p in st.session_state.ally_players if p.get("Pos") == "GK"]
     st.session_state.active_ally_gk = st.selectbox("ally_gk_sel", ["未登録"] + ally_gk_nums, label_visibility="collapsed")
 with c_gk2:
-    st.markdown(f'<p style="color: #991b1b; font-weight: bold; margin-bottom: -15px;">出場中の相手GK ({opp_name_in})</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color: #991b1b; font-weight: bold; margin-bottom: 5px;">出場中の相手GK ({opp_name_in})</p>', unsafe_allow_html=True)
     opp_gk_nums = [p["No."] for p in st.session_state.opp_players if p.get("Pos") == "GK"]
     st.session_state.active_opp_gk = st.selectbox("opp_gk_sel", ["未登録"] + opp_gk_nums, label_visibility="collapsed")
 
@@ -267,7 +252,8 @@ with col_rec:
     st.markdown(f'<div style="background-color: #fff3e0; padding: 10px; border-radius: 5px; border-left: 5px solid #ff9800; color: #e65100; margin-bottom: 20px; font-weight: bold;">選択エリア: {zone_disp if st.session_state.selected_zone != "未選択" else "エリアを選択"}</div>', unsafe_allow_html=True)
     team_rec = st.radio("チーム", ["味方", "相手"], horizontal=True, key="team_r")
     p_color = "#1e3a8a" if team_rec == "味方" else "#991b1b"
-    st.markdown(f'<p style="color: {p_color}; font-weight: bold; margin-bottom: -15px;">No.</p>', unsafe_allow_html=True)
+    # 修正点：ここも重ならないよう余白を確保
+    st.markdown(f'<p style="color: {p_color}; font-weight: bold; margin-bottom: 5px;">No.</p>', unsafe_allow_html=True)
     p_list_r = st.session_state.ally_players if team_rec == "味方" else st.session_state.opp_players
     p_nums_r = [p["No."] for p in sort_p(p_list_r)]
     p_num_r = st.selectbox("rec_no", p_nums_r if p_nums_r else ["未登録"], label_visibility="collapsed", key="num_r")
@@ -355,10 +341,11 @@ with c_map2: f2, a2 = plt.subplots(figsize=(5, 4)); draw_map(a2, "相手"); st.p
 st.divider(); st.subheader("個人スタッツ")
 c_sel1, c_sel2 = st.columns(2)
 with c_sel1:
-    st.markdown(f'<p style="color: #1e3a8a; font-weight: bold; margin-bottom: -15px;">【{ally_name_in}】選手を選択</p>', unsafe_allow_html=True)
+    # 修正点：ここも重ならないよう余白を確保
+    st.markdown(f'<p style="color: #1e3a8a; font-weight: bold; margin-bottom: 5px;">【{ally_name_in}】選手を選択</p>', unsafe_allow_html=True)
     sel_a_label = st.selectbox("ally_sel", ["未選択"] + [f"No.{p['No.']} {p['名前']}" for p in sort_p(st.session_state.ally_players)], label_visibility="collapsed")
 with c_sel2:
-    st.markdown(f'<p style="color: #991b1b; font-weight: bold; margin-bottom: -15px;">【{opp_name_in}】選手を選択</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color: #991b1b; font-weight: bold; margin-bottom: 5px;">【{opp_name_in}】選手を選択</p>', unsafe_allow_html=True)
     sel_o_label = st.selectbox("opp_sel", ["未選択"] + [f"No.{p['No.']} {p['名前']}" for p in sort_p(st.session_state.opp_players)], label_visibility="collapsed")
 
 def draw_card(label, team, color, p_list):
@@ -369,7 +356,7 @@ def draw_card(label, team, color, p_list):
     st.markdown(f'<div style="background:{bg}; padding:15px; border-radius:15px; border:1px solid {color}33;"><div style="text-align:center; font-weight:bold; font-size:1.2rem; color:white; background:{color}; padding:10px; border-radius:10px; margin-bottom:10px;">{label} の成績</div>', unsafe_allow_html=True)
     for sl, sk in stat_items:
         if "セーブ率" in sl and not is_gk: continue
-        val = ps[sk]; disp = f"{int(val)}" if "回数" in sl or "cnt" in sk or "tf" in sl or "rtf" in sl else f"{val:.1f}%"
+        val = ps[sk]; disp = f"{int(val)}" if "回数" in sl or "cnt" in sk or "tf" in sk or "rtf" in sk else f"{val:.1f}%"
         st.markdown(f'<div style="display:flex; justify-content:space-between; padding:6px 15px; border-bottom:1px solid #eee;"><span style="color:#666; font-size:0.9rem;">{sl}</span><span style="font-weight:bold;">{disp}</span></div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 ci1, ci2 = st.columns(2)
@@ -393,7 +380,7 @@ def disp_log(label, color):
 with c_la: disp_log(ally_name_in, "#1e3a8a")
 with c_lo: disp_log(opp_name_in, "#991b1b")
 
-# rerunループを整理
+# タイマーが動いている時だけ再描画
 if st.session_state.running or len(st.session_state.suspensions) > 0:
     time.sleep(0.1)
     st.rerun()
