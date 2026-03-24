@@ -156,10 +156,12 @@ elapsed = (time.time() - st.session_state.start_time) if st.session_state.runnin
 current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
 
 # --- 追加：JavaScriptからの時間を受け取って同期する ---
-new_seconds = js_timer_component(st.session_state.running, int(elapsed))
-if new_seconds is not None:
-    elapsed = new_seconds
-    current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
+result = js_timer_component(st.session_state.running, int(elapsed))
+
+# JavaScriptから「数字」が届いているかチェックして、届いていたら上書きする
+if result is not None and isinstance(result, (int, float)):
+    elapsed = result
+current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
 
 # CSSの適用：明るめのグレー（#94a3b8）ですべてのボタンを統一
 st.markdown("""
