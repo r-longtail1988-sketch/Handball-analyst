@@ -161,8 +161,8 @@ if "history_df" not in st.session_state: st.session_state.history_df = None
 # --- セッション管理セクション：JSと通信して「止まらない秒数」を取得 ---
 base_val = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
 with st.sidebar:
-    # サイドバーの最下部などで1ピクセルだけ使ってJSを動かし続ける
-    res = js_timer_component(st.session_state.running, int(base_val))
+    # 通信用として呼び出し（is_display=False を指定）
+    res = js_timer_component(st.session_state.running, int(base_val), is_display=False)
 if res is not None and isinstance(res, (int, float)):
     elapsed = res
 else:
@@ -350,13 +350,13 @@ def render_heatmap_ui(ax, t_name, target_logs):
 st.title("🤾 Handball analyst")
 
 if display_mode == "🔴 リアルタイム試合記録":
-    # タイトルのすぐ下にタイマーを表示
-    js_timer_component(st.session_state.running, int(elapsed))
+    # メイン表示用として呼び出し（is_display=True を指定）
+    js_timer_component(st.session_state.running, int(elapsed), is_display=True)
+
     # 操作ボタンとピリオド（ここは既存のまま）
     btn_col1, btn_col2 = st.columns([1, 1])
 
     # 操作ボタンとピリオド（前半/後半）を横並びに配置
-    # ここは横に並べても文字数が少ないので崩れません
     btn_col1, btn_col2 = st.columns([1, 1])
     with btn_col1:
         if st.button("Start / Stop", use_container_width=True, key="stopwatch"):
