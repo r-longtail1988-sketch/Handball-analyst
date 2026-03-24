@@ -152,15 +152,20 @@ if "start_time" not in st.session_state: st.session_state.start_time = 0
 if "half" not in st.session_state: st.session_state.half = "前半"
 if "history_df" not in st.session_state: st.session_state.history_df = None
 
-# --- セッション管理セクションの計算ロジック ---
+# --- セッション管理セクションの計算ロジック（計算・通信専用） ---
 base_val = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
-res = js_timer_component(st.session_state.running, int(base_val))
+
+# サイドバーの中でこっそり通信だけ行う（画面上部には表示されません）
+with st.sidebar:
+    res = js_timer_component(st.session_state.running, int(base_val))
+
 if res is not None and isinstance(res, (int, float)):
     elapsed = res
 else:
     elapsed = base_val
 
 current_time_str = time.strftime('%M:%S', time.gmtime(max(0, float(elapsed))))
+
 # CSSの適用：明るめのグレー（#94a3b8）ですべてのボタンを統一
 st.markdown("""
     <style>
@@ -342,6 +347,8 @@ def render_heatmap_ui(ax, t_name, target_logs):
 st.title("🤾 Handball analyst")
 
 if display_mode == "🔴 リアルタイム試合記録":
+    # タイトルのすぐ下にタイマーを表示
+    js_timer_component(st.session_state.running, int(elapsed))
     # 操作ボタンとピリオド（ここは既存のまま）
     btn_col1, btn_col2 = st.columns([1, 1])
 
