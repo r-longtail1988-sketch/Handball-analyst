@@ -438,7 +438,7 @@ if display_mode == "🔴 リアルタイム試合記録":
 
     col_vis, col_rec = st.columns([1.5, 1])
     with col_vis:
-        fig_prev, ax_prev = plt.subplots(figsize=(7, 5)); draw_court_base(ax_prev, engine)
+        fig_prev, ax_prev = plt.subplots(figsize=(5, 3.5)); draw_court_base(ax_prev, engine)
         for zid, pos in ZONE_LABELS.items():
             p = np.array(engine.get_poly(zid)); is_selected = st.session_state.selected_zone == zid
             ax_prev.fill(p[:,0], p[:,1], color="#f39c12" if is_selected else "#fdf2e9", alpha=0.8 if is_selected else 0.3, zorder=1)
