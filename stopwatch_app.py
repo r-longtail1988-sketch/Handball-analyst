@@ -153,23 +153,14 @@ if "half" not in st.session_state: st.session_state.half = "前半"
 if "history_df" not in st.session_state: st.session_state.history_df = None
 
 # --- セッション管理セクションの計算ロジック ---
-# 1. まずベースとなる経過時間を計算
-base_elapsed = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
-
-# 2. JavaScriptタイマーを呼び出し、最新の「秒数」をリクエストする
-# ※ここで「見た目」のタイマーも画面に表示されます
-result = js_timer_component(st.session_state.running, int(base_elapsed))
-
-# 3. JavaScriptから有効な「数字（秒数）」が戻ってきていればそれを使う。なければベースを使う。
-if result is not None and isinstance(result, (int, float)):
-    elapsed = result
+base_val = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
+res = js_timer_component(st.session_state.running, int(base_val))
+if res is not None and isinstance(res, (int, float)):
+    elapsed = res
 else:
-    elapsed = base_elapsed
+    elapsed = base_val
 
-# 4. 最後に、確定した elapsed（必ず数字になる）を使って文字列を作る
-# これで gmtime のエラーが消えます
-current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
-
+current_time_str = time.strftime('%M:%S', time.gmtime(max(0, float(elapsed))))
 # CSSの適用：明るめのグレー（#94a3b8）ですべてのボタンを統一
 st.markdown("""
     <style>
@@ -351,13 +342,6 @@ def render_heatmap_ui(ax, t_name, target_logs):
 st.title("🤾 Handball analyst")
 
 if display_mode == "🔴 リアルタイム試合記録":
-# JavaScriptタイマーを表示し、現在の秒数を受け取る
-    new_seconds = js_timer_component(st.session_state.running, int(elapsed))
-    
-    # 手元のタブレットから新しい秒数が届いたら、Python側の時間(elapsed)を更新する
-    if new_seconds is not None:
-        elapsed = new_seconds
-        current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
     # 操作ボタンとピリオド（ここは既存のまま）
     btn_col1, btn_col2 = st.columns([1, 1])
 
