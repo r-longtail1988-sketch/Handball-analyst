@@ -152,15 +152,22 @@ if "start_time" not in st.session_state: st.session_state.start_time = 0
 if "half" not in st.session_state: st.session_state.half = "前半"
 if "history_df" not in st.session_state: st.session_state.history_df = None
 
-elapsed = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
-current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
+# --- セッション管理セクションの計算ロジック ---
+# 1. まずベースとなる経過時間を計算
+base_elapsed = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
 
-# --- 追加：JavaScriptからの時間を受け取って同期する ---
-result = js_timer_component(st.session_state.running, int(elapsed))
+# 2. JavaScriptタイマーを呼び出し、最新の「秒数」をリクエストする
+# ※ここで「見た目」のタイマーも画面に表示されます
+result = js_timer_component(st.session_state.running, int(base_elapsed))
 
-# JavaScriptから「数字」が届いているかチェックして、届いていたら上書きする
+# 3. JavaScriptから有効な「数字（秒数）」が戻ってきていればそれを使う。なければベースを使う。
 if result is not None and isinstance(result, (int, float)):
     elapsed = result
+else:
+    elapsed = base_elapsed
+
+# 4. 最後に、確定した elapsed（必ず数字になる）を使って文字列を作る
+# これで gmtime のエラーが消えます
 current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
 
 # CSSの適用：明るめのグレー（#94a3b8）ですべてのボタンを統一
