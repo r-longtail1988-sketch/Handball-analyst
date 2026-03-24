@@ -11,9 +11,45 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image
 import pandas as pd
 from datetime import datetime
+import streamlit.components.v1 as components
 
 # ================================
-# 1. 接続・設定の初期化
+# 1. JavaScriptタイマーを生成する関数
+# ================================
+def js_timer_component(running, current_seconds):
+    status = "running" if running else "paused"
+    
+    html_code = f"""
+    <div id="timer-display" style="background-color: #262730; padding: 20px; border-radius: 12px; text-align: center; border: 3px solid #464b5d; margin-bottom: 15px;">
+        <p id="time-text" style="color: #00ff00; font-family: 'Courier New', monospace; font-size: 5rem; font-weight: bold; margin: 0; line-height: 1; white-space: nowrap;">00:00</p>
+    </div>
+
+    <script>
+        let seconds = {current_seconds};
+        let status = "{status}";
+        const display = document.getElementById('time-text');
+
+        function updateDisplay() {{
+            let m = Math.floor(seconds / 60); 
+            let s = seconds % 60;
+            display.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+        }}
+
+        if (status === "running") {{
+            setInterval(() => {{
+                seconds++;
+                updateDisplay();
+                // Streamlit側に「現在の秒数」をリアルタイムで送る
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: seconds}}, '*');
+            }}, 1000);
+        }}
+        updateDisplay();
+    </script>
+    """
+    return components.html(html_code, height=170)
+
+# ================================
+# 2. 接続・設定の初期化
 # ================================
 GSHEETS_READY = False
 try:
@@ -38,7 +74,7 @@ STAT_ITEMS = [
 ]
 
 # ================================
-# 2. コート定義と数学的ロジック
+# 3. コート定義と数学的ロジック
 # ================================
 GOAL_Y = 20.0
 HALF_GOAL = 1.5
@@ -97,7 +133,7 @@ def draw_court_base(ax, engine):
     ax.set_xlim(-10.5, 10.5); ax.set_ylim(7.5, 20.5); ax.set_aspect("equal"); ax.axis("off")
 
 # ================================
-# 3. セッション管理とCSS
+# 4. セッション管理とCSS
 # ================================
 st.set_page_config(layout="wide", page_title="Handball analyst")
 engine = HandballCourtEngine()
@@ -118,6 +154,12 @@ if "history_df" not in st.session_state: st.session_state.history_df = None
 
 elapsed = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
 current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
+
+# --- 追加：JavaScriptからの時間を受け取って同期する ---
+new_seconds = js_timer_component(st.session_state.running, int(elapsed))
+if new_seconds is not None:
+    elapsed = new_seconds
+    current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
 
 # CSSの適用：明るめのグレー（#94a3b8）ですべてのボタンを統一
 st.markdown("""
@@ -153,7 +195,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ================================
-# 4. サイドバー
+# 5. サイドバー
 # ================================
 with st.sidebar:
     st.header("📋 試合情報")
@@ -242,7 +284,7 @@ with st.sidebar:
     display_mode = st.radio("モード切替", ["🔴 リアルタイム試合記録", "📚 過去試合の履歴参照"], index=0)
 
 # ================================
-# 5. 分析・表示用共通関数
+# 6. 分析・表示用共通関数
 # ================================
 def get_stats_logic(logs_to_calc, team_name, all_logs, target_no=None, is_gk_target=False):
     l_off = [l for l in logs_to_calc if l["チーム"] == team_name]
@@ -295,31 +337,20 @@ def render_heatmap_ui(ax, t_name, target_logs):
             ax.text(pos[0], pos[1], f"{r*100:.0f}", ha='center', va='center', fontsize=10, fontweight='bold', zorder=5).set_path_effects([pe.withStroke(linewidth=2, foreground="white")])
 
 # ================================
-# 6. メインUI
+# 7. メインUI
 # ================================
 st.title("🤾 Handball analyst")
 
 if display_mode == "🔴 リアルタイム試合記録":
-    # --- 【修正ポイント1】タイマーを独立させ、改行を禁止する ---
-    st.markdown(f"""
-        <div style="
-            background-color: #262730; 
-            padding: 20px; 
-            border-radius: 12px; 
-            text-align: center; 
-            border: 3px solid #464b5d; 
-            margin-bottom: 15px;">
-            <p style="
-                color: #00ff00; 
-                font-family: 'Courier New', monospace; 
-                font-size: 5rem; 
-                font-weight: bold; 
-                margin: 0; 
-                line-height: 1;
-                white-space: nowrap;">  {current_time_str}
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+# JavaScriptタイマーを表示し、現在の秒数を受け取る
+    new_seconds = js_timer_component(st.session_state.running, int(elapsed))
+    
+    # 手元のタブレットから新しい秒数が届いたら、Python側の時間(elapsed)を更新する
+    if new_seconds is not None:
+        elapsed = new_seconds
+        current_time_str = time.strftime('%M:%S', time.gmtime(elapsed))
+    # 操作ボタンとピリオド（ここは既存のまま）
+    btn_col1, btn_col2 = st.columns([1, 1])
 
     # 操作ボタンとピリオド（前半/後半）を横並びに配置
     # ここは横に並べても文字数が少ないので崩れません
@@ -376,7 +407,7 @@ if display_mode == "🔴 リアルタイム試合記録":
         st.markdown('<div style="color: #888; font-style: italic; padding: 15px; border: 1px dashed #ccc; border-radius: 10px; text-align: center;">現在退場者はいません</div>', unsafe_allow_html=True)
     
     st.session_state.suspensions = active_suspensions
-    
+
     st.subheader("選手名簿")
     col_plist1, col_plist2 = st.columns(2)
     def sort_p(l): return sorted(l, key=lambda x: int(x["No."]) if x["No."].isdigit() else 999)
