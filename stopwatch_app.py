@@ -14,13 +14,17 @@ from datetime import datetime
 import streamlit.components.v1 as components
 
 # ================================
-# 1. JavaScriptタイマーを生成する関数
+# 1. JavaScriptタイマーを生成する関数 (オフライン対応・レイアウト修正版)
 # ================================
-def js_timer_component(running, current_seconds):
+def js_timer_component(running, current_seconds, is_display=False):
     status = "running" if running else "paused"
     
+    # 通信用(is_display=False)のときは画面に何も出さない設定
+    display_style = "display: block;" if is_display else "display: none;"
+    container_height = 170 if is_display else 0
+
     html_code = f"""
-    <div id="timer-display" style="background-color: #262730; padding: 20px; border-radius: 12px; text-align: center; border: 3px solid #464b5d; margin-bottom: 15px;">
+    <div id="timer-display" style="{display_style} background-color: #262730; padding: 20px; border-radius: 12px; text-align: center; border: 3px solid #464b5d; margin-bottom: 15px;">
         <p id="time-text" style="color: #00ff00; font-family: 'Courier New', monospace; font-size: 5rem; font-weight: bold; margin: 0; line-height: 1; white-space: nowrap;">00:00</p>
     </div>
 
@@ -32,21 +36,23 @@ def js_timer_component(running, current_seconds):
         function updateDisplay() {{
             let m = Math.floor(seconds / 60); 
             let s = seconds % 60;
-            display.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+            if (display) {{
+                display.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+            }}
         }}
 
         if (status === "running") {{
             setInterval(() => {{
                 seconds++;
                 updateDisplay();
-                // Streamlit側に「現在の秒数」をリアルタイムで送る
+                // Streamlit側に「現在の秒数」をリアルタイムで送る（これがオフライン時の命綱）
                 window.parent.postMessage({{type: 'streamlit:setComponentValue', value: seconds}}, '*');
             }}, 1000);
         }}
         updateDisplay();
     </script>
     """
-    return components.html(html_code, height=170)
+    return components.html(html_code, height=container_height)
 
 # ================================
 # 2. 接続・設定の初期化
@@ -152,18 +158,15 @@ if "start_time" not in st.session_state: st.session_state.start_time = 0
 if "half" not in st.session_state: st.session_state.half = "前半"
 if "history_df" not in st.session_state: st.session_state.history_df = None
 
-# --- セッション管理セクションの計算ロジック（計算・通信専用） ---
+# --- セッション管理セクション：JSと通信して「止まらない秒数」を取得 ---
 base_val = (time.time() - st.session_state.start_time) if st.session_state.running else st.session_state.stopped_time
-
-# サイドバーの中でこっそり通信だけ行う（画面上部には表示されません）
 with st.sidebar:
+    # サイドバーの最下部などで1ピクセルだけ使ってJSを動かし続ける
     res = js_timer_component(st.session_state.running, int(base_val))
-
 if res is not None and isinstance(res, (int, float)):
     elapsed = res
 else:
     elapsed = base_val
-
 current_time_str = time.strftime('%M:%S', time.gmtime(max(0, float(elapsed))))
 
 # CSSの適用：明るめのグレー（#94a3b8）ですべてのボタンを統一
