@@ -300,30 +300,83 @@ def render_heatmap_ui(ax, t_name, target_logs):
 st.title("🤾 Handball analyst")
 
 if display_mode == "🔴 リアルタイム試合記録":
-    c_sw1, c_sw2 = st.columns([1.2, 3.8])
-    
-    with c_sw1:
-        st.markdown(f"""<div style="background-color: #262730; padding: 20px; border-radius: 12px; text-align: center; border: 3px solid #464b5d; margin-bottom: 10px;"><p style="color: #00ff00; font-family: 'Courier New', monospace; font-size: 3.8rem; font-weight: bold; margin: 0; line-height: 1;">{current_time_str}</p></div>""", unsafe_allow_html=True)
+    # --- 【修正ポイント1】タイマーを独立させ、改行を禁止する ---
+    st.markdown(f"""
+        <div style="
+            background-color: #262730; 
+            padding: 20px; 
+            border-radius: 12px; 
+            text-align: center; 
+            border: 3px solid #464b5d; 
+            margin-bottom: 15px;">
+            <p style="
+                color: #00ff00; 
+                font-family: 'Courier New', monospace; 
+                font-size: 5rem; 
+                font-weight: bold; 
+                margin: 0; 
+                line-height: 1;
+                white-space: nowrap;">  {current_time_str}
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 操作ボタンとピリオド（前半/後半）を横並びに配置
+    # ここは横に並べても文字数が少ないので崩れません
+    btn_col1, btn_col2 = st.columns([1, 1])
+    with btn_col1:
         if st.button("Start / Stop", use_container_width=True, key="stopwatch"):
-            if not st.session_state.running: st.session_state.start_time = time.time() - st.session_state.stopped_time; st.session_state.running = True
-            else: st.session_state.stopped_time = time.time() - st.session_state.start_time; st.session_state.running = False
+            if not st.session_state.running: 
+                st.session_state.start_time = time.time() - st.session_state.stopped_time
+                st.session_state.running = True
+            else: 
+                st.session_state.stopped_time = time.time() - st.session_state.start_time
+                st.session_state.running = False
             st.rerun()
+    with btn_col2:
         st.session_state.half = st.radio("period", ["前半", "後半"], horizontal=True, label_visibility="collapsed", key="period_toggle")
 
-    with c_sw2:
-        st.markdown('<p style="font-weight: bold; margin-bottom: 8px; font-size: 1.1rem;">⏱ 退場カウントダウン</p>', unsafe_allow_html=True)
-        active_suspensions = []; cards_list = []
-        for s in st.session_state.suspensions:
-            remaining = 120 - (elapsed - s["start_time"])
-            if remaining > 0:
-                color = "#1e3a8a" if s["team"] == "味方" else "#991b1b"
-                rem_str = time.strftime('%M:%S', time.gmtime(remaining))
-                card_item = f'<div style="display: inline-block; padding: 10px 18px; border: 3px solid {color}; border-radius: 10px; color: {color}; background-color: white; margin-right: 12px; margin-bottom: 10px; min-width: 110px; text-align: center; box-shadow: 2px 2px 8px rgba(0,0,0,0.15); font-family: sans-serif;"><span style="font-weight: 900; font-size: 1.8rem;">{s["no"]}</span> &nbsp; <span style="font-weight: 500; font-size: 1.5rem;">{rem_str}</span></div>'
-                cards_list.append(card_item); active_suspensions.append(s)
-        if cards_list: st.markdown(f'<div style="display: flex; flex-wrap: wrap;">{"".join(cards_list)}</div>', unsafe_allow_html=True)
-        else: st.markdown('<div style="color: #888; font-style: italic; padding: 15px; border: 1px dashed #ccc; border-radius: 10px;">現在退場者はいません</div>', unsafe_allow_html=True)
-        st.session_state.suspensions = active_suspensions
+    st.divider()
 
+    # --- 【修正ポイント2】退場タイマーをタイマーの「下」に配置する ---
+    st.markdown('<p style="font-weight: bold; margin-bottom: 8px; font-size: 1.2rem; text-align: center;">⏱ 退場カウントダウン</p>', unsafe_allow_html=True)
+    
+    active_suspensions = []
+    cards_list = []
+    
+    for s in st.session_state.suspensions:
+        remaining = 120 - (elapsed - s["start_time"])
+        if remaining > 0:
+            color = "#1e3a8a" if s["team"] == "味方" else "#991b1b"
+            rem_str = time.strftime('%M:%S', time.gmtime(remaining))
+            # カード形式で表示（これも改行を禁止）
+            card_item = f'''
+            <div style="
+                display: inline-block; 
+                padding: 12px 20px; 
+                border: 3px solid {color}; 
+                border-radius: 10px; 
+                color: {color}; 
+                background-color: white; 
+                margin: 5px; 
+                min-width: 140px; 
+                text-align: center; 
+                box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+                white-space: nowrap;">
+                <span style="font-weight: 900; font-size: 1.8rem;">No.{s["no"]}</span> 
+                <span style="font-weight: 500; font-size: 1.8rem; margin-left:15px;">{rem_str}</span>
+            </div>'''
+            cards_list.append(card_item)
+            active_suspensions.append(s)
+            
+    if cards_list:
+        # 退場者が複数いる場合は、横に並べて入り切らなくなったら自動で折り返します
+        st.markdown(f'<div style="display: flex; flex-wrap: wrap; justify-content: center;">{"".join(cards_list)}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="color: #888; font-style: italic; padding: 15px; border: 1px dashed #ccc; border-radius: 10px; text-align: center;">現在退場者はいません</div>', unsafe_allow_html=True)
+    
+    st.session_state.suspensions = active_suspensions
+    
     st.subheader("選手名簿")
     col_plist1, col_plist2 = st.columns(2)
     def sort_p(l): return sorted(l, key=lambda x: int(x["No."]) if x["No."].isdigit() else 999)
