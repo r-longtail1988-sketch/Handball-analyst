@@ -277,11 +277,30 @@ with st.sidebar:
                 st.error(f"送信失敗: {e}")
 
     if st.button("♻️ 画面をリセット(次の試合へ)", use_container_width=True):
+        # 1. ログデータの初期化
         st.session_state.logs = []
         st.session_state.log_id_counter = 0
-        st.session_state.last_sent_idx = 0 # 追加：リセット
+        st.session_state.last_sent_idx = 0
+        
+        # 2. 選手名簿の初期化（ここが漏れているとデータが残ります）
+        st.session_state.ally_players = []
+        st.session_state.opp_players = []
+        st.session_state.suspensions = []
+        
+        # 3. 選択状態の初期化
+        st.session_state.selected_zone = "未選択"
+        st.session_state.active_ally_gk = "未登録"
+        st.session_state.active_opp_gk = "未登録"
+        
+        # 4. タイマーの初期化
         st.session_state.stopped_time = 0
+        st.session_state.start_time = 0
         st.session_state.running = False
+        
+        # 5. ウィジェットのキャッシュを強制クリア（重要）
+        # st.data_editorなどは key を使って状態を保持しているため、
+        # 必要に応じて key を変えるか、一度クリアする必要があります。
+        
         st.rerun()
 
     has_logs = len(st.session_state.logs) > 0
